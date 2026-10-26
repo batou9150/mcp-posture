@@ -31,7 +31,7 @@ The CLI is run through `uvx`, no install needed, pinned to the release this skil
 for:
 
 ```bash
-MCPP="uvx mcp-posture@1.1.1" # x-release-please-version
+MCPP="uvx mcp-posture@1.1.2" # x-release-please-version
 ```
 
 ## Commands

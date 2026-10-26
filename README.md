@@ -51,7 +51,7 @@ docker run --rm ghcr.io/batou9150/mcp-posture scan https://mcp.example.com/mcp
 **GitHub Action** (SARIF to code scanning, Markdown to the job summary):
 
 ```yaml
-- uses: batou9150/mcp-posture@v1.1.1 # x-release-please-version
+- uses: batou9150/mcp-posture@v1.1.2 # x-release-please-version
   with:
     targets-file: mcp-servers.txt
     fail-on: high
