@@ -24,5 +24,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # The builder must stay on the distroless runtime's Python minor (3.13);
+      # move both together by hand when distroless ships a newer one.
+      - dependency-name: python
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
     commit-message:
       prefix: deps
