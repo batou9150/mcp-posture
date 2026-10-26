@@ -1,7 +1,9 @@
 version: 2
 updates:
   - package-ecosystem: github-actions
-    directories: ["/", "/.github/workflows"]
+    # "/" covers both action.yml and .github/workflows; listing the workflows
+    # directory too makes Dependabot open duplicate group PRs.
+    directory: /
     schedule:
       interval: weekly
     groups:
