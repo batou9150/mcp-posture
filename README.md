@@ -105,7 +105,8 @@ The default mode is **passive**: metadata `GET`s, the standard MCP handshake and
 few read-only probes (plain HTTP, a nonexistent path, TLS handshakes), all listed in
 [`docs/threat-model.md`](docs/threat-model.md#what-a-passive-scan-sends). No tool is ever called. Behaviours that only an active probe could confirm (Origin validation,
 token audience enforcement, PKCE enforcement) are listed as not verified in
-[`docs/spec-notes.md`](docs/spec-notes.md).
+[`docs/spec-notes.md`](docs/spec-notes.md); mcp-posture stays passive by design, see
+[active testing](#compared-with-other-mcp-scanners) for a tool that probes them.
 
 ## How it works
 
@@ -178,7 +179,9 @@ Several good tools exist; they solve different problems. Facts as of 2026-10 (se
 | SARIF | yes | no | no | yes | no (JUnit) |
 
 Pair `mcp-posture` with a runtime proxy (e.g. [mcp-context-protector](https://github.com/trailofbits/mcp-context-protector))
-for enforcement; it reports, it does not block.
+for enforcement; it reports, it does not block. For active authorization-server testing of servers
+you own (PKCE and redirect URI enforcement, token audience, refresh token rotation), see
+[mcp-authprobe](https://github.com/Enigmacker/mcp-authprobe), which can run after mcp-posture.
 
 ## Responsible use
 
