@@ -224,7 +224,12 @@ def _try_b64(s: str) -> str | None:
             raw = decoder(padded)
         except (binascii.Error, ValueError):
             continue
-        text = raw.decode("utf-8", errors="replace")
+        try:
+            # Strict: with errors="replace", U+FFFD counts as printable and any run of the
+            # base64 alphabet (separator lines, paths, identifiers) "decodes" to text.
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
         if _printable_ratio(text) > 0.9:
             return text
     return None
@@ -234,7 +239,10 @@ def encoded_blobs(text: str) -> list[Blob]:
     out: list[Blob] = []
     for m in _DATA_URI.finditer(text):
         out.append(Blob("data-uri", m.group(0)[:60], None))
-    for m in _B64.finditer(text):
+    # IDs inside URLs (document IDs, commit hashes) are not hidden payloads; URLs themselves
+    # are judged by suspicious_urls.
+    bare = _URL.sub(lambda m: " " * len(m.group(0)), text)
+    for m in _B64.finditer(bare):
         s = m.group(0)
         if s.isalpha() and (s.islower() or s.isupper()):
             continue  # a long word, not base64
@@ -243,7 +251,7 @@ def encoded_blobs(text: str) -> list[Blob]:
         decoded = _try_b64(s)
         if decoded is not None or _entropy_like(s):
             out.append(Blob("base64", s[:60], decoded[:200] if decoded else None))
-    for m in _HEX.finditer(text):
+    for m in _HEX.finditer(bare):
         s = m.group(0)
         try:
             decoded = bytes.fromhex(s).decode("utf-8")

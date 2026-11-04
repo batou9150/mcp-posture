@@ -134,6 +134,10 @@ def tool02(ctx: ScanContext) -> Iterator[Finding]:
         found: list[tuple[str, str, list[H.HiddenChar]]] = []
         for field, text in pairs:
             chars = H.hidden_chars(text)
+            if _is_skill_body(location, field):
+                # Soft hyphens are ordinary in long prose and data files (hyphenation, glyph
+                # tables); every other invisible character still counts.
+                chars = [c for c in chars if c.codepoint != "U+00AD"]
             if chars:
                 found.append((field, text, chars))
         if not found:

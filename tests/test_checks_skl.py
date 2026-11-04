@@ -258,6 +258,25 @@ def test_poisoned_skill_body_and_script() -> None:
     assert all(f.location == "skill:git-workflow" for f in tool05)
 
 
+def test_ordinary_skill_content_is_not_flagged() -> None:
+    """Real skills are long Markdown with separator lines, paths, snake_case field names,
+    document URLs and data files; none of that is hidden content (field run on a production
+    server)."""
+    body = (
+        "---\nname: git-workflow\ndescription: Git conventions.\n---\n"
+        + "-" * 60
+        + "\nRun /mnt/skills/public/git-workflow/scripts/generate_backlog.py first.\n"
+        "Field: nom_de_la_formation_suivie___sfeir_institute_example\n"
+        "Template: https://docs.example.com/presentation/d/1NEAKawG-l4fUwMV_yfMFXJLAmZg21qeFg0rF0/\n"
+    )
+    files: dict[str, str | bytes] = {
+        "SKILL.md": body,
+        "assets/metrics.json": '{"chars": "abc\u00addef"}\n',
+    }
+    result = scan(skills={"git-workflow": files})
+    assert not {"MCPP-TOOL02", "MCPP-TOOL03"} & ids(result)
+
+
 def test_legitimate_skill_directives_are_not_flagged() -> None:
     body = (
         "---\nname: git-workflow\ndescription: Git conventions.\n---\n"
