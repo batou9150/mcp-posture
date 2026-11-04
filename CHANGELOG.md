@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.3](https://github.com/batou9150/mcp-posture/compare/v1.1.2...v1.1.3) (2026-11-04)
+
+
+### Dependencies
+
+* bump distroless/python3-debian13 from `64e54c4` to `1c32c37` ([#17](https://github.com/batou9150/mcp-posture/issues/17)) ([25caa1e](https://github.com/batou9150/mcp-posture/commit/25caa1e8f247ba66c7d0853203f6809c4d4d6895))
+* bump pydantic from 2.14.1 to 2.14.2 in the runtime group ([#19](https://github.com/batou9150/mcp-posture/issues/19)) ([77a2a4b](https://github.com/batou9150/mcp-posture/commit/77a2a4bc3d9fb134e2c4d59b4de9560885a29fff))
+* bump the dev group with 7 updates ([#18](https://github.com/batou9150/mcp-posture/issues/18)) ([bd6ea38](https://github.com/batou9150/mcp-posture/commit/bd6ea3819f7411cace1264c120572d47f406488f))
+
 ## [1.1.2](https://github.com/batou9150/mcp-posture/compare/v1.1.1...v1.1.2) (2026-10-26)
 
 
