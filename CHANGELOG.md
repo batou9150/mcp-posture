@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.2.0](https://github.com/batou9150/mcp-posture/compare/v1.1.3...v1.2.0) (2026-11-04)
+
+
+### Features
+
+* audit Agent Skills served over MCP (SEP-2640) ([c940179](https://github.com/batou9150/mcp-posture/commit/c9401792653d867e8562f01d81cd09ae69d25814))
+
+
+### Bug Fixes
+
+* send the Mcp-Name header that 2026-07-28 requires on resources/read ([0874782](https://github.com/batou9150/mcp-posture/commit/0874782720ca771d5cd61a86436de232446f3d6a))
+* stop TOOL03 decoding garbage as base64 and ignore soft hyphens in skill bodies ([ca3a0ef](https://github.com/batou9150/mcp-posture/commit/ca3a0efbed7b9d0164da3708a9f15d00c89083d5))
+
+
+### Documentation
+
+* describe skill pinning and lock version 2 ([6a9a1e8](https://github.com/batou9150/mcp-posture/commit/6a9a1e8cf8ae57be83d359a53e025f70671e8299))
+* reference the official MCP conformance suite ([fcf87b9](https://github.com/batou9150/mcp-posture/commit/fcf87b9a62885eab140f4fee374f4ac5b2ca91b2))
+* stay passive-only and point to mcp-authprobe for active checks ([cab5e06](https://github.com/batou9150/mcp-posture/commit/cab5e064817f45160b1192e35a3785e83387e2e4))
+
 ## [1.1.3](https://github.com/batou9150/mcp-posture/compare/v1.1.2...v1.1.3) (2026-11-04)
 
 
