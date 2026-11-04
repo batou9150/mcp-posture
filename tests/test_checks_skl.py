@@ -63,6 +63,27 @@ def test_collection_reads_entries_and_files() -> None:
     assert [i.location for i in ctx.mcp.surface if i.kind == "skill"] == ["skill:git-workflow"]
 
 
+def test_resources_read_sends_mcp_name() -> None:
+    """2026-07-28 servers reject resources/read without `Mcp-Name` (-32020); the fixture
+    enforces it, so a regression shows up as unreadable files here."""
+    files: dict[str, str | bytes] = {**SAFE_SKILL, "references/café notes.md": "# Notes\n"}
+    ctx = collect(profile(skills={"git-workflow": files}))
+    assert all(f.error is None for f in ctx.mcp.skills.files)
+    reads = [ex for ex in ctx.exchanges if '"resources/read"' in (ex.request_body or "")]
+    names = {dict(ex.request_headers).get("mcp-name") or dict(ex.request_headers).get("Mcp-Name")
+             for ex in reads}  # fmt: skip
+    assert SAFE_URI in names
+    assert any(n and n.startswith("=?base64?") for n in names)  # non-ASCII URI is encoded
+
+
+def test_header_value_encoding() -> None:
+    from mcp_posture.client import header_value
+
+    assert header_value("skill://a/SKILL.md") == "skill://a/SKILL.md"
+    assert header_value(" padded ") == "=?base64?IHBhZGRlZCA=?="
+    assert header_value("=?base64?x?=").startswith("=?base64?PT9")
+
+
 def test_no_extension_no_skill_requests() -> None:
     ctx = collect(McpProfile(require_auth=False))
     assert not ctx.mcp.skills.declared

@@ -372,6 +372,15 @@ def mcp_app(profile: McpProfile) -> Starlette:
         if method in ("tools/list", "prompts/list", "resources/list", "resources/templates/list"):
             result = list_result(method, params)
             return respond(request, {"jsonrpc": "2.0", "id": rid, "result": result}, {})
+        if modern and method in ("tools/call", "prompts/get", "resources/read"):
+            # 2026-07-28: `Mcp-Name` MUST mirror params.name / params.uri (HeaderMismatch).
+            want = params.get("uri" if method == "resources/read" else "name")
+            got = request.headers.get("mcp-name", "")
+            if got.startswith("=?base64?") and got.endswith("?="):
+                got = base64.b64decode(got[9:-2]).decode("utf-8")
+            if got != want:
+                error = {"code": -32020, "message": "Mcp-Name header missing or mismatched"}
+                return _json({"jsonrpc": "2.0", "id": rid, "error": error}, 400)
         if profile.skills is not None and method in ("skills/list", "skills/get", "resources/read"):
             answer = skills_answer(method, params)
             return respond(request, {"jsonrpc": "2.0", "id": rid, **answer}, {})

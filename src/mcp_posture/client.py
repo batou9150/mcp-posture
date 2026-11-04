@@ -10,7 +10,9 @@ files, within a byte budget.
 
 from __future__ import annotations
 
+import base64
 import json
+import re
 from dataclasses import dataclass, field, replace
 from typing import Any
 from urllib.parse import urljoin, urlsplit
@@ -82,6 +84,30 @@ def parse_rpc_body(ex: HttpExchange, request_id: int | None = None) -> dict[str,
         return None
     doc = ex.json()
     return doc if isinstance(doc, dict) else None
+
+
+# 2026-07-28 Streamable HTTP: these requests MUST mirror params.name / params.uri in `Mcp-Name`
+# (servers answer -32020 HeaderMismatch otherwise).
+_NAME_SOURCES = {"tools/call": "name", "prompts/get": "name", "resources/read": "uri"}
+_SENTINEL = re.compile(r"^=\?base64\?.*\?=$")
+
+
+def header_value(value: str) -> str:
+    """Plain when the value is header-safe ASCII, else the spec's Base64 sentinel form."""
+    safe = (
+        value == value.strip()
+        and all(c == "\t" or 0x20 <= ord(c) <= 0x7E for c in value)
+        and not _SENTINEL.match(value)
+    )
+    if safe:
+        return value
+    return "=?base64?" + base64.b64encode(value.encode("utf-8")).decode("ascii") + "?="
+
+
+def _name_header(method: str, params: dict[str, Any] | None) -> str | None:
+    key = _NAME_SOURCES.get(method)
+    value = (params or {}).get(key) if key else None
+    return header_value(value) if isinstance(value, str) else None
 
 
 def _rpc_error(ex: HttpExchange, msg: dict[str, Any] | None) -> str:
@@ -197,12 +223,17 @@ class McpClient:
         if st.session_id:
             await self._delete_session(st, authenticated)
 
-    def _headers(self, st: _State, method: str, authenticated: bool) -> dict[str, str]:
+    def _headers(
+        self, st: _State, method: str, authenticated: bool, params: dict[str, Any] | None = None
+    ) -> dict[str, str]:
         h = {"Accept": ACCEPT, "Content-Type": "application/json"}
         if st.version:
             h["MCP-Protocol-Version"] = st.version
         if st.probe.era == "modern" or method == "server/discover":
             h["Mcp-Method"] = method
+            name = _name_header(method, params)
+            if name is not None:
+                h["Mcp-Name"] = name
         if st.session_id:
             h["Mcp-Session-Id"] = st.session_id
         if authenticated and self.token:
@@ -231,7 +262,7 @@ class McpClient:
             ex = await self.fetcher.request(
                 "POST",
                 self.url,
-                headers=self._headers(st, method, authenticated),
+                headers=self._headers(st, method, authenticated, params),
                 json_body=body,
                 follow_redirects=False,
                 stop_when=_sse_has_response(rid) if rid is not None else None,
