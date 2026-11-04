@@ -181,7 +181,10 @@ Several good tools exist; they solve different problems. Facts as of 2026-10 (se
 Pair `mcp-posture` with a runtime proxy (e.g. [mcp-context-protector](https://github.com/trailofbits/mcp-context-protector))
 for enforcement; it reports, it does not block. For active authorization-server testing of servers
 you own (PKCE and redirect URI enforcement, token audience, refresh token rotation), see
-[mcp-authprobe](https://github.com/Enigmacker/mcp-authprobe), which can run after mcp-posture.
+[mcp-authprobe](https://github.com/Enigmacker/mcp-authprobe), which can run after mcp-posture. To check
+that a server implements the protocol and its extensions correctly (conformance rather than security
+posture), use the official [MCP conformance suite](https://github.com/modelcontextprotocol/conformance)
+(`npx @modelcontextprotocol/conformance server --url …`; newer scenarios ship under the `alpha` npm tag).
 
 ## Responsible use
 
