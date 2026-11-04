@@ -114,6 +114,39 @@ MCP 2025-11-25 and 2026-07-28 still cite draft-00. The latest IETF draft is
 Not normative in the spec beyond the Security Best Practices and the tool annotations schema;
 TOOL and PIN checks are heuristics with explicit confidence levels.
 
+## Skills extension (SEP-2640)
+
+[`io.modelcontextprotocol/skills`](https://github.com/modelcontextprotocol/ext-skills/blob/main/specification/beta/skills.mdx)
+(SEP-2640, merged 2026-09-13; extension spec at Beta) serves
+[Agent Skills](https://agentskills.io/specification) from an MCP server: `skills/list` and
+`skills/get` return entries (frontmatter and a manifest of `{uri, digest, size}`), and files are
+read with `resources/read`. It is specified against revision 2026-07-28, and the scanner only
+looks for it in `server/discover` capabilities. Sources fetched on 2026-11-04.
+
+The scanner reads skills the way a reviewer would, not the way a host loads them: it reads every
+listed text file within a budget (50 skills, 256 KiB per file, 4 MiB per target) and skips
+binaries. The host-side "lazy retrieval" MUST (no prefetching) governs what a host puts in a
+model's context, which an audit does not do.
+
+| Requirement (server side) | Spec section | Check |
+|---|---|---|
+| Declaring the extension requires the `resources` capability | Capability Negotiation | MCPP-SKL01 |
+| MUST implement `skills/list` and `skills/get` | Capability Negotiation | MCPP-SKL02 |
+| `skills/get` of an unknown URI → `-32602` | Getting a Skill, Error Handling | MCPP-SKL02 |
+| Last URI segment MUST equal `frontmatter.name`; name follows Agent Skills rules | Resource Mapping | MCPP-SKL03 |
+| `resources` REQUIRED: complete array (with SKILL.md itself) or `"dynamic"`; `sha256:` digests and sizes; files inside the skill | Skill Entries | MCPP-SKL03 |
+| `resultType: "complete"`, `ttlMs`, `cacheScope` on every result | Listing, Getting | MCPP-SKL03 (low) |
+| `frontmatter` identical to the SKILL.md frontmatter; served bytes match digest and size | Frontmatter, Integrity and Verification | MCPP-SKL04 |
+| `"dynamic"` skills offer no integrity and cannot be content-bound | Resources, Security Considerations | MCPP-SKL05 |
+| SHOULD NOT serve more than 512 files or 16 MiB per skill | Limits | MCPP-SKL06 |
+| `allowed-tools` from a remote server is a permission request | Security Considerations | MCPP-SKL07 |
+| Skill code can be placed on the host and run | Security Considerations | MCPP-SKL08 (inventory) |
+| Skill content is untrusted model input (prompt injection) | Security Considerations | MCPP-TOOL01/02/03/05 on frontmatter and files |
+| Names are not unique; impersonation through name collisions | Names, Security Considerations | MCPP-TOOL09 |
+| Content-bound approval: any change to the `{uri, digest}` set revokes it | Security Considerations | MCPP-PIN01-03 (skills pinned since lock version 2) |
+| `directoryRead` → MUST implement `resources/directory/read` | Reading Directories | N/O: not probed yet |
+| Host obligations (verification on read, acting window, origin tagging, cache isolation, no implicit execution, collision handling) | several | N/O: host behaviour, invisible to a server scan |
+
 ## Existing scanners (survey, 2026-10-04)
 
 | Tool | Focus | OAuth posture | SARIF |

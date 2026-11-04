@@ -87,7 +87,7 @@ def test_lock_roundtrip_and_determinism(tmp_path: Path) -> None:
     assert load_lock(path) == LOCK
     assert dump_lock(pin(BASE)) == dump_lock(LOCK)
     doc = json.loads(path.read_text())
-    assert doc["version"] == 1
+    assert doc["version"] == 2
     assert list(doc["targets"][MCP_URL]) == sorted(doc["targets"][MCP_URL])
 
 

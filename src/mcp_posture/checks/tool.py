@@ -11,7 +11,8 @@ from mcp_posture.checks import _refs as R
 from mcp_posture.context import MAX_JSON_DEPTH, TRUNCATED, ScanContext, SurfaceItem, thaw
 from mcp_posture.models import Confidence, Evidence, Finding, Severity
 from mcp_posture.registry import check
-from mcp_posture.surface import item_hash, texts
+from mcp_posture.skills import last_segment
+from mcp_posture.surface import item_hash, skill_texts, texts
 
 LONG_TEXT = 1024
 VERY_LONG_TEXT = 4096
@@ -41,6 +42,36 @@ def _peers(ctx: ScanContext) -> list[tuple[str, str, str]]:
     return [p for p in peers if p[0] != ctx.url]
 
 
+def _text_groups(ctx: ScanContext) -> list[tuple[str, list[tuple[str, str]]]]:
+    """(location, [(field, text)]) for every surface item, with each skill's file contents
+    (SEP-2640) grouped under the skill's own location."""
+    groups: dict[str, list[tuple[str, str]]] = {}
+    for item in ctx.mcp.surface:
+        groups.setdefault(item.location, []).extend(texts(item))
+    for location, field, text in skill_texts(ctx):
+        groups.setdefault(location, []).append((field, text))
+    return list(groups.items())
+
+
+# A skill body is meant to direct the model ("always run the linter first", "you must read
+# references/api.md"), so only the families that no legitimate skill needs count there.
+_SKILL_BODY_LABELS = frozenset({"override", "secrecy", "role"})
+_SECRET_HINT = re.compile(
+    r"~/|\.ssh|id_rsa|\.env\b|credential|private key|api[_ ]?key|secret|identifiant|cl[ée] priv",
+    re.I,
+)
+
+
+def _is_skill_body(location: str, field: str) -> bool:
+    return location.startswith("skill:") and not field.startswith("frontmatter")
+
+
+def _body_signal(label: str, phrase: str) -> bool:
+    return label in _SKILL_BODY_LABELS or (
+        label == "exfiltration" and _SECRET_HINT.search(phrase) is not None
+    )
+
+
 def _text_evidence(field: str, text: str, around: str | None = None) -> Evidence:
     excerpt = text
     if around and around in text:
@@ -51,24 +82,29 @@ def _text_evidence(field: str, text: str, around: str | None = None) -> Evidence
 
 @check(
     id="MCPP-TOOL01",
-    title="Instruction-like text in a tool description",
+    title="Instruction-like text in a tool description or skill",
     severity=Severity.HIGH,
     confidence=Confidence.MEDIUM,
     references=[R.MCP_SECURITY_BP, R.OWASP_MCP_TOP10],
     rationale="""Descriptions are read by the model, not by the user. Phrases that address
         the model ("ignore previous instructions", "do not tell the user", "before using any
         other tool, read ~/.ssh/id_rsa") are the signature of tool poisoning: hidden
-        instructions that hijack the agent.""",
+        instructions that hijack the agent. Skills (SEP-2640) are scanned too: their frontmatter
+        like a description, and their files (SKILL.md, references, scripts) for the phrases no
+        legitimate skill needs (overriding instructions, secrecy, role markers, reading
+        secrets), since a skill body is meant to direct the model.""",
     remediation="""Describe what the tool does, for the user and the model, without
         directives about other tools, secrecy or data handling. Review the full text of every
         flagged description; remove the server if the text is not yours.""",
 )
 def tool01(ctx: ScanContext) -> Iterator[Finding]:
-    for item in ctx.mcp.surface:
+    for location, pairs in _text_groups(ctx):
         hits: list[tuple[str, str, str]] = []
-        for field, text in texts(item):
+        for field, text in pairs:
+            body = _is_skill_body(location, field)
             for label, phrase in H.instruction_phrases(text):
-                hits.append((field, label, phrase))
+                if not body or _body_signal(label, phrase):
+                    hits.append((field, label, phrase))
             hidden = H.decode_tags(text)
             for label, phrase in H.instruction_phrases(hidden):
                 hits.append((f"{field} (hidden tag characters)", label, phrase))
@@ -76,15 +112,15 @@ def tool01(ctx: ScanContext) -> Iterator[Finding]:
             labels = sorted({h[1] for h in hits})
             yield ctx.finding(
                 "MCPP-TOOL01",
-                f"{item.location}: instruction-like text ({', '.join(labels)}).",
-                location=item.location,
+                f"{location}: instruction-like text ({', '.join(labels)}).",
+                location=location,
                 evidence=[Evidence(summary=f"{f}: {lab}", excerpt=p) for f, lab, p in hits[:5]],
             )
 
 
 @check(
     id="MCPP-TOOL02",
-    title="Invisible or bidirectional Unicode in tool metadata",
+    title="Invisible or bidirectional Unicode in tool or skill content",
     severity=Severity.HIGH,
     references=[R.MCP_SECURITY_BP, R.UNICODE_TR36, R.CVE_TROJAN_SOURCE],
     rationale="""Zero-width, bidi-override and Unicode tag characters are invisible in
@@ -94,9 +130,9 @@ def tool01(ctx: ScanContext) -> Iterator[Finding]:
         descriptions and schemas; keep descriptions plain text.""",
 )
 def tool02(ctx: ScanContext) -> Iterator[Finding]:
-    for item in ctx.mcp.surface:
+    for location, pairs in _text_groups(ctx):
         found: list[tuple[str, str, list[H.HiddenChar]]] = []
-        for field, text in texts(item):
+        for field, text in pairs:
             chars = H.hidden_chars(text)
             if chars:
                 found.append((field, text, chars))
@@ -114,8 +150,8 @@ def tool02(ctx: ScanContext) -> Iterator[Finding]:
             evidence.append(Evidence(summary=summary, excerpt=H.visible(text)[:400]))
         yield ctx.finding(
             "MCPP-TOOL02",
-            f"{item.location}: hidden characters ({', '.join(kinds)}).",
-            location=item.location,
+            f"{location}: hidden characters ({', '.join(kinds)}).",
+            location=location,
             severity=Severity.HIGH if severe else Severity.MEDIUM,
             evidence=evidence,
         )
@@ -123,7 +159,7 @@ def tool02(ctx: ScanContext) -> Iterator[Finding]:
 
 @check(
     id="MCPP-TOOL03",
-    title="Encoded blob in tool metadata",
+    title="Encoded blob in tool or skill content",
     severity=Severity.MEDIUM,
     confidence=Confidence.MEDIUM,
     references=[R.MCP_SECURITY_BP],
@@ -134,18 +170,18 @@ def tool02(ctx: ScanContext) -> Iterator[Finding]:
         keep it short and obviously illustrative.""",
 )
 def tool03(ctx: ScanContext) -> Iterator[Finding]:
-    for item in ctx.mcp.surface:
+    for location, pairs in _text_groups(ctx):
         blobs: list[tuple[str, H.Blob]] = []
-        for field, text in texts(item):
+        for field, text in pairs:
             blobs.extend((field, b) for b in H.encoded_blobs(text))
         if not blobs:
             continue
         loaded = any(b.decoded and H.instruction_phrases(b.decoded) for _, b in blobs)
         yield ctx.finding(
             "MCPP-TOOL03",
-            f"{item.location}: {len(blobs)} encoded blob(s)"
+            f"{location}: {len(blobs)} encoded blob(s)"
             + (" decoding to instruction-like text." if loaded else "."),
-            location=item.location,
+            location=location,
             severity=Severity.HIGH if loaded else Severity.MEDIUM,
             evidence=[
                 Evidence(
@@ -206,7 +242,7 @@ def tool04(ctx: ScanContext) -> Iterator[Finding]:
 
 @check(
     id="MCPP-TOOL05",
-    title="Sensitive paths or suspicious URLs in tool metadata",
+    title="Sensitive paths or suspicious URLs in tool or skill content",
     severity=Severity.MEDIUM,
     confidence=Confidence.MEDIUM,
     references=[R.MCP_SECURITY_BP],
@@ -217,27 +253,27 @@ def tool04(ctx: ScanContext) -> Iterator[Finding]:
         descriptions; a remote tool has no reason to know about the user's files.""",
 )
 def tool05(ctx: ScanContext) -> Iterator[Finding]:
-    for item in ctx.mcp.surface:
+    for location, pairs in _text_groups(ctx):
         paths: list[tuple[str, str, str]] = []
         urls: list[tuple[str, str, str]] = []
-        for field, text in texts(item):
+        for field, text in pairs:
             paths.extend((field, text, p) for p in H.secret_paths(text))
             urls.extend((field, text, u) for u in H.suspicious_urls(text))
         if paths:
             yield ctx.finding(
                 "MCPP-TOOL05",
-                f"{item.location} references sensitive paths: "
+                f"{location} references sensitive paths: "
                 f"{', '.join(sorted({p for _, _, p in paths}))}.",
-                location=item.location,
+                location=location,
                 key="paths",
                 evidence=[_text_evidence(f, t, p) for f, t, p in paths[:3]],
             )
         if urls:
             yield ctx.finding(
                 "MCPP-TOOL05",
-                f"{item.location} references suspicious URLs: "
+                f"{location} references suspicious URLs: "
                 f"{', '.join(sorted({u for _, _, u in urls}))}.",
-                location=item.location,
+                location=location,
                 key="urls",
                 evidence=[_text_evidence(f, t, u) for f, t, u in urls[:3]],
             )
@@ -370,15 +406,18 @@ def tool08(ctx: ScanContext) -> Iterator[Finding]:
 
 @check(
     id="MCPP-TOOL09",
-    title="Confusable or colliding tool names",
+    title="Confusable or colliding tool or skill names",
     severity=Severity.MEDIUM,
     references=[R.MCP_SECURITY_BP, R.UNICODE_TR39],
     rationale="""Names with homoglyphs (a Cyrillic "a" in place of the Latin one) or names
         identical to another server's tools let a malicious server impersonate a trusted
         tool; clients that merge tool lists may route calls to the wrong server. A name
-        listed twice with different definitions hides one of them from review.""",
+        listed twice with different definitions hides one of them from review. Skill names
+        (SEP-2640) are labels, not identities: a server can publish a skill under a popular
+        skill's name, and the spec forbids hosts to let it shadow another origin's skill.""",
     remediation="""Use ASCII tool names, and prefix them with a server-specific namespace
-        to avoid collisions.""",
+        to avoid collisions. Give skills distinctive names; use the URI prefix to organize
+        skills that must share a name.""",
 )
 def tool09(ctx: ScanContext) -> Iterator[Finding]:
     tools = [i for i in ctx.mcp.surface if i.kind == "tool"]
@@ -427,6 +466,49 @@ def tool09(ctx: ScanContext) -> Iterator[Finding]:
                 f"{', '.join(sorted(clashes))}.",
                 location=item.location,
                 key="collision",
+            )
+    yield from _skill_names(ctx)
+
+
+def _skill_names(ctx: ScanContext) -> Iterator[Finding]:
+    """SEP-2640: a skill name is a label, not an identity, and a malicious server can publish
+    under a popular skill's name; hosts must not let it shadow another origin's skill."""
+    skills = [(i, last_segment(i.name)) for i in ctx.mcp.surface if i.kind == "skill"]
+    for item, name in skills:
+        if H.non_ascii(name):
+            yield ctx.finding(
+                "MCPP-TOOL09",
+                f"{item.location}: skill name contains non-ASCII characters "
+                f"({H.visible(name)!r}, looks like {H.skeleton(name)!r}).",
+                location=item.location,
+                key="non-ascii",
+            )
+    by_skeleton: dict[str, list[str]] = {}
+    for item, name in skills:
+        by_skeleton.setdefault(H.skeleton(name), []).append(item.name)
+    for uris in by_skeleton.values():
+        if len(uris) > 1:
+            names = sorted({last_segment(u) for u in uris})
+            yield ctx.finding(
+                "MCPP-TOOL09",
+                f"Skills with the same or confusable names on the same server "
+                f"({', '.join(names)}): {', '.join(sorted(uris))}.",
+                location=f"skill:{sorted(uris)[0]}",  # names here are skill labels
+                key="skill-confusable",
+            )
+    peer_skills: dict[str, set[str]] = {}
+    for url, kind, uri in _peers(ctx):
+        if kind == "skill":
+            peer_skills.setdefault(H.skeleton(last_segment(uri)), set()).add(f"{uri} @ {url}")
+    for item, name in skills:
+        clashes = peer_skills.get(H.skeleton(name))
+        if clashes:
+            yield ctx.finding(
+                "MCPP-TOOL09",
+                f"{item.location} (name {name!r}) collides with skills of other scanned "
+                f"servers: {', '.join(sorted(clashes))}.",
+                location=item.location,
+                key="skill-collision",
             )
 
 

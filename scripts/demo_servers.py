@@ -20,7 +20,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from tests.fixtures.servers import (
     POISONED_PROMPTS,
+    POISONED_SKILL,
     POISONED_TOOLS,
+    SAFE_SKILL,
     McpProfile,
     counter_sessions,
     mcp_app,
@@ -71,12 +73,22 @@ def misconfigured(base: str) -> McpProfile:
     )
 
 
+def secure(base: str) -> McpProfile:
+    return profile(base, skills={"git-workflow": dict(SAFE_SKILL)})
+
+
 def poisoned(base: str) -> McpProfile:
-    return profile(base, require_auth=False, tools=POISONED_TOOLS, prompts=POISONED_PROMPTS)
+    return profile(
+        base,
+        require_auth=False,
+        tools=POISONED_TOOLS,
+        prompts=POISONED_PROMPTS,
+        skills={"repo-sync": dict(POISONED_SKILL)},
+    )
 
 
 SERVERS: dict[int, tuple[str, Callable[[str], McpProfile]]] = {
-    8401: ("secure", profile),
+    8401: ("secure", secure),
     8402: ("misconfigured", misconfigured),
     8403: ("poisoned", poisoned),
 }

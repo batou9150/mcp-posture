@@ -19,11 +19,21 @@ def _baseline(ctx: ScanContext) -> tuple[Lock | None, Mapping[str, LockItem] | N
     return lock, lock.targets.get(ctx.url)
 
 
+def _skills_unpinned(ctx: ScanContext) -> bool:
+    """A version 1 baseline (≤ 1.1.x) predates skill pinning; comparing would report every
+    skill as added, so skills are left out until the target is pinned again."""
+    lock, _ = _baseline(ctx)
+    return lock is not None and lock.version < 2 and any(i.kind == "skill" for i in ctx.mcp.surface)
+
+
 def _diff(ctx: ScanContext):  # type: ignore[no-untyped-def]
     _, pinned = _baseline(ctx)
     if pinned is None or not ctx.mcp.surface_listed:
         return None
-    return diff_surface(pinned, ctx.mcp.surface)
+    surface = ctx.mcp.surface
+    if _skills_unpinned(ctx):
+        surface = tuple(i for i in surface if i.kind != "skill")
+    return diff_surface(pinned, surface)
 
 
 _REMEDIATION = """If the change is expected (you updated the server), review the diff and
@@ -66,7 +76,8 @@ def pin02(ctx: ScanContext) -> Iterator[Finding]:
     title="Tool definition changed since the baseline (rug pull)",
     severity=Severity.HIGH,
     references=[R.MCP_SECURITY_BP, R.OWASP_MCP_TOP10],
-    rationale="""The description, schema or annotations of a pinned item changed. A server
+    rationale="""The description, schema or annotations of a pinned item changed (for a
+        skill: its frontmatter or the digest of any of its files). A server
         can pass review with a benign description and swap it later; the agent reads the new
         text on the next session without the user noticing.""",
     remediation=_REMEDIATION,
@@ -90,7 +101,8 @@ def pin03(ctx: ScanContext) -> Iterator[Finding]:
     references=[R.MCP_SECURITY_BP],
     rationale="""A baseline was given but cannot be compared for this target: it is not
         pinned, or its tool surface could not be listed (authentication required and no
-        token supplied).""",
+        token supplied). Skills (SEP-2640) are only compared against baselines made by a
+        version that pins them (lock version 2).""",
     remediation="""Pin the target with `mcp-posture pin <url>`, or supply a token so the tool
         surface can be listed.""",
 )
@@ -105,4 +117,12 @@ def pin04(ctx: ScanContext) -> Iterator[Finding]:
             "MCPP-PIN04",
             "The tool surface could not be listed, so the baseline was not compared.",
             key="unlisted",
+        )
+    elif _skills_unpinned(ctx):
+        yield ctx.finding(
+            "MCPP-PIN04",
+            "The baseline has no skills for this target (made before skills were pinned, or "
+            "before the server published any): skills were not compared. Re-run "
+            "`mcp-posture pin` to cover them.",
+            key="skills",
         )

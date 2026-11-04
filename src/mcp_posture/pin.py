@@ -15,7 +15,10 @@ from mcp_posture import __version__
 from mcp_posture.context import SurfaceItem
 from mcp_posture.surface import canonical, canonical_json, item_hash
 
-LOCK_VERSION = 1
+# 2: skills (SEP-2640) are pinned. Version 1 baselines are still read; their skills are not
+# compared (see MCPP-PIN04) until the target is pinned again.
+LOCK_VERSION = 2
+READABLE_LOCK_VERSIONS = frozenset({1, LOCK_VERSION})
 DEFAULT_LOCK = "mcp-posture.lock.json"
 
 
@@ -71,8 +74,11 @@ def load_lock(path: Path) -> Lock:
         lock = Lock.model_validate(raw)
     except ValidationError as e:
         raise LockError(f"baseline {path} is not a mcp-posture lock file: {e}") from e
-    if lock.version != LOCK_VERSION:
-        raise LockError(f"baseline {path} has version {lock.version}, expected {LOCK_VERSION}")
+    if lock.version not in READABLE_LOCK_VERSIONS:
+        raise LockError(
+            f"baseline {path} has version {lock.version}, expected "
+            f"{' or '.join(map(str, sorted(READABLE_LOCK_VERSIONS)))}"
+        )
     return lock
 
 

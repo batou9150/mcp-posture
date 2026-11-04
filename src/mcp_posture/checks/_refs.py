@@ -83,3 +83,16 @@ RFC6749_3_3 = (
     "RFC 6749 §3.3 Access Token Scope",
     "https://www.rfc-editor.org/rfc/rfc6749#section-3.3",
 )
+_SKILLS = (
+    "https://github.com/modelcontextprotocol/ext-skills/blob/main/specification/beta/skills.mdx"
+)
+MCP_SKILLS = ("MCP Skills extension (SEP-2640)", _SKILLS)
+MCP_SKILLS_SECURITY = (
+    "MCP Skills extension: Security Considerations",
+    f"{_SKILLS}#security-considerations",
+)
+MCP_SKILLS_INTEGRITY = (
+    "MCP Skills extension: Integrity and Verification",
+    f"{_SKILLS}#integrity-and-verification",
+)
+AGENT_SKILLS = ("Agent Skills specification", "https://agentskills.io/specification")

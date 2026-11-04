@@ -43,7 +43,7 @@ def test_catalogue_entries_are_complete() -> None:
 
 def test_families_are_known() -> None:
     families = {m.family for m in catalogue()}
-    assert families <= {"TRN", "AUTHN", "PRM", "ASM", "CIMD", "SCP", "TOOL", "PIN", "ACT"}
+    assert families <= {"TRN", "AUTHN", "PRM", "ASM", "CIMD", "SCP", "TOOL", "PIN", "SKL", "ACT"}
 
 
 def test_repository_has_no_invisible_characters() -> None:

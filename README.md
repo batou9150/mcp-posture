@@ -93,16 +93,18 @@ medium   MCPP-PRM03   resource '.../mcp/' does not match '.../mcp' (trailing sla
 | `ASM` | 13 | RFC 8414 / OIDC metadata: issuer match, HTTPS endpoints, PKCE S256 / `plain`, implicit and password grants, DCR, `iss` (RFC 9207) |
 | `CIMD` | 10 | Client ID Metadata Document support and registration strategy; `cimd lint` rules for your own client's document |
 | `SCP` | 3 | Over-broad scopes, missing `scope` in challenges, PRM/AS scope consistency |
-| `TOOL` | 10 | Instruction-like text, invisible/bidi/tag Unicode, encoded blobs, shadowing, secret paths and exfil URLs, annotations, unconstrained URL/path/code inputs, confusable names, nesting too deep to inspect |
-| `PIN` | 4 | Rug pulls: tools/prompts/resources added, removed or changed since `mcp-posture pin` |
+| `TOOL` | 10 | Instruction-like text, invisible/bidi/tag Unicode, encoded blobs, shadowing, secret paths and exfil URLs, annotations, unconstrained URL/path/code inputs, confusable names, nesting too deep to inspect; text checks also cover skill content |
+| `SKL` | 8 | Agent Skills served over MCP (SEP-2640): extension conformance, entry validity, digest and frontmatter integrity, dynamic skills, size limits, `allowed-tools` permission requests, inventory of bundled code |
+| `PIN` | 4 | Rug pulls: tools/prompts/resources/skills added, removed or changed since `mcp-posture pin` |
 
 `mcp-posture checks list` prints the catalogue; `mcp-posture checks show MCPP-ASM04` explains one
 check (rationale, remediation, references). Check IDs are stable and never reused.
 The research behind the catalogue, with every MUST/SHOULD mapped to a check, is in
 [`docs/spec-notes.md`](docs/spec-notes.md).
 
-The default mode is **passive**: metadata `GET`s, the standard MCP handshake and list calls, and a
-few read-only probes (plain HTTP, a nonexistent path, TLS handshakes), all listed in
+The default mode is **passive**: metadata `GET`s, the standard MCP handshake and list calls, reads
+of skill files when the server publishes [skills](docs/spec-notes.md#skills-extension-sep-2640)
+(SEP-2640), and a few read-only probes (plain HTTP, a nonexistent path, TLS handshakes), all listed in
 [`docs/threat-model.md`](docs/threat-model.md#what-a-passive-scan-sends). No tool is ever called. Behaviours that only an active probe could confirm (Origin validation,
 token audience enforcement, PKCE enforcement) are listed as not verified in
 [`docs/spec-notes.md`](docs/spec-notes.md); mcp-posture stays passive by design, see

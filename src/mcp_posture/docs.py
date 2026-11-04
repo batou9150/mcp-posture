@@ -14,6 +14,7 @@ FAMILIES = {
     "CIMD": "Client ID Metadata Documents",
     "SCP": "Scopes",
     "TOOL": "Tool surface",
+    "SKL": "Skills served over MCP (SEP-2640)",
     "PIN": "Rug-pull pinning",
     "ACT": "Active checks",
 }

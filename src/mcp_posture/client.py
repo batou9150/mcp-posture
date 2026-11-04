@@ -3,7 +3,9 @@
 Era detection mirrors the official SDK: probe ``server/discover`` (2026-07-28 stateless
 envelope); anything that is not a modern answer falls back to the ``initialize`` handshake
 (≤ 2025-11-25); if the POST endpoint rejects that too, try the legacy HTTP+SSE GET stream.
-Only list operations are sent; no tool is ever called.
+Only list and read operations are sent; no tool is ever called. Servers declaring the Skills
+extension (SEP-2640) also get ``skills/list``, ``skills/get`` and ``resources/read`` of skill
+files, within a byte budget.
 """
 
 from __future__ import annotations
@@ -16,7 +18,16 @@ from urllib.parse import urljoin, urlsplit
 from mcp_types.version import HANDSHAKE_PROTOCOL_VERSIONS, LATEST_HANDSHAKE_VERSION
 
 from mcp_posture import __version__
-from mcp_posture.context import Challenge, McpProbe, SurfaceItem, SurfaceKind, freeze
+from mcp_posture import skills as S
+from mcp_posture.context import (
+    Challenge,
+    McpProbe,
+    SkillFile,
+    SkillsProbe,
+    SurfaceItem,
+    SurfaceKind,
+    freeze,
+)
 from mcp_posture.discovery import parse_www_authenticate
 from mcp_posture.models import SpecRevision
 from mcp_posture.net import Fetcher, HttpExchange, StopFn
@@ -71,6 +82,16 @@ def parse_rpc_body(ex: HttpExchange, request_id: int | None = None) -> dict[str,
         return None
     doc = ex.json()
     return doc if isinstance(doc, dict) else None
+
+
+def _rpc_error(ex: HttpExchange, msg: dict[str, Any] | None) -> str:
+    """Short, server-neutral description of a failed JSON-RPC call."""
+    error = (msg or {}).get("error")
+    if isinstance(error, dict) and isinstance(error.get("code"), int):
+        return f"JSON-RPC error {error['code']}"
+    if ex.error:
+        return ex.error
+    return f"HTTP {ex.status}" if ex.status is not None else "no response"
 
 
 def iter_sse_data(text: str) -> list[str]:
@@ -171,6 +192,8 @@ class McpClient:
                 await self._try_legacy_sse(st, authenticated)
         if st.probe.era != "unknown" and not (st.probe.auth_required and not authenticated):
             await self._list_surface(st, authenticated)
+            if st.probe.era == "modern" and S.declaration(st.probe.capabilities) is not None:
+                await self._list_skills(st, authenticated)
         if st.session_id:
             await self._delete_session(st, authenticated)
 
@@ -194,6 +217,7 @@ class McpClient:
         authenticated: bool,
         *,
         notification: bool = False,
+        max_bytes: int | None = None,
     ) -> tuple[HttpExchange, dict[str, Any] | None]:
         body: dict[str, Any] = {"jsonrpc": "2.0", "method": method}
         rid = None
@@ -212,6 +236,7 @@ class McpClient:
                 follow_redirects=False,
                 stop_when=_sse_has_response(rid) if rid is not None else None,
                 read_timeout=SSE_READ_TIMEOUT,
+                max_bytes=max_bytes,
             )
             if not self._follow_endpoint_redirect(st, ex):
                 break
@@ -273,6 +298,9 @@ class McpClient:
                 era="modern",
                 negotiated_version=MODERN_VERSION,
                 server_info=freeze(meta.get(META_SERVER_INFO)) if isinstance(meta, dict) else None,
+                capabilities=freeze(caps)
+                if isinstance(caps := result.get("capabilities"), dict)
+                else None,
             )
             sid = ex.header("mcp-session-id")
             if sid:
@@ -376,6 +404,134 @@ class McpClient:
             surface_listed_unauthenticated=listed and not authenticated,
             errors=tuple(errors),
         )
+
+    async def _skills_rpc(
+        self, st: _State, method: str, extra: dict[str, Any], authenticated: bool, **kw: Any
+    ) -> tuple[HttpExchange, dict[str, Any] | None]:
+        return await self._rpc(st, method, {**self._modern_meta(), **extra}, authenticated, **kw)
+
+    async def _list_skills(self, st: _State, authenticated: bool) -> None:
+        """SEP-2640 surface: entries from ``skills/list``, one ``skills/get`` on a listed skill
+        and one on an unknown URI, then ``resources/read`` of skill files within the budget.
+        Everything is a read; nothing is executed or installed."""
+        settings = S.declaration(st.probe.capabilities)
+        probe = SkillsProbe(declared=True, settings=freeze(dict(settings or {})))
+        entries: list[dict[str, Any]] = []
+        pages: list[Any] = []
+        cursor: str | None = None
+        for _ in range(MAX_PAGES):
+            ex, msg = await self._skills_rpc(
+                st, "skills/list", {"cursor": cursor} if cursor else {}, authenticated
+            )
+            result = (msg or {}).get("result")
+            if not isinstance(result, dict):
+                probe = replace(probe, list_error=_rpc_error(ex, msg))
+                break
+            probe = replace(probe, list_ok=True)
+            pages.append(freeze({k: v for k, v in result.items() if k != "skills"}))
+            entries.extend(e for e in result.get("skills") or [] if isinstance(e, dict))
+            cursor = result.get("nextCursor")
+            if not isinstance(cursor, str) or not cursor:
+                break
+        probe = replace(probe, pages=tuple(pages), entries=tuple(freeze(e) for e in entries))
+
+        first = next((e["uri"] for e in entries if isinstance(e.get("uri"), str)), None)
+        if first is not None:
+            ex, msg = await self._skills_rpc(st, "skills/get", {"uri": first}, authenticated)
+            result = (msg or {}).get("result")
+            ok = isinstance(result, dict) and isinstance(result.get("skill"), dict)
+            if ok and isinstance(result, dict):
+                pages.append(freeze({k: v for k, v in result.items() if k != "skill"}))
+            probe = replace(
+                probe,
+                pages=tuple(pages),
+                get_ok=ok,
+                get_error=None if ok else _rpc_error(ex, msg),
+            )
+        ex, msg = await self._skills_rpc(
+            st, "skills/get", {"uri": S.UNKNOWN_SKILL_URI}, authenticated
+        )
+        error = (msg or {}).get("error")
+        code = error.get("code") if isinstance(error, dict) else None
+        probe = replace(
+            probe,
+            unknown_get_code=code if isinstance(code, int) else None,
+            unknown_get_answered=isinstance((msg or {}).get("result"), dict),
+        )
+
+        probe = replace(
+            probe, files=tuple(await self._read_skill_files(st, entries, authenticated))
+        )
+        surface = tuple(
+            SurfaceItem(kind="skill", name=S.label(e["uri"]), definition=freeze(e))
+            for e in entries
+            if isinstance(e.get("uri"), str)
+        )
+        st.probe = replace(st.probe, skills=probe, surface=(*st.probe.surface, *surface))
+
+    async def _read_skill_files(
+        self, st: _State, entries: list[dict[str, Any]], authenticated: bool
+    ) -> list[SkillFile]:
+        files: list[SkillFile] = []
+        budget = S.MAX_TARGET_BYTES
+        # JSON escaping or base64 inflates the body; leave room around the raw cap.
+        body_cap = S.MAX_FILE_BYTES * 2 + 16_384
+        for entry in entries[: S.MAX_SKILLS_READ]:
+            skill_uri = entry.get("uri")
+            if not isinstance(skill_uri, str):
+                continue
+            manifest = S.resources_of(entry)
+            listed: list[tuple[str, int | None, str | None]] = (
+                [
+                    (r["uri"], r.get("size") if isinstance(r.get("size"), int) else None, None)
+                    for r in manifest
+                    if isinstance(r.get("uri"), str)
+                ]
+                if manifest is not None
+                else [(skill_uri, None, None)]
+            )
+            # SKILL.md first, so the budget always covers it.
+            listed.sort(key=lambda r: r[0] != skill_uri)
+            for uri, size, mime in listed:
+                if not S.is_text(uri, mime) and uri != skill_uri:
+                    files.append(SkillFile(uri, skill_uri, mime_type=mime, skipped="not text"))
+                    continue
+                if size is not None and size > S.MAX_FILE_BYTES:
+                    files.append(SkillFile(uri, skill_uri, skipped=f"{size} bytes, over budget"))
+                    continue
+                if budget <= 0:
+                    files.append(SkillFile(uri, skill_uri, skipped="scan budget exhausted"))
+                    continue
+                ex, msg = await self._skills_rpc(
+                    st, "resources/read", {"uri": uri}, authenticated, max_bytes=body_cap
+                )
+                result = (msg or {}).get("result")
+                if ex.truncated:
+                    files.append(SkillFile(uri, skill_uri, skipped="response over budget"))
+                    continue
+                if not isinstance(result, dict):
+                    files.append(SkillFile(uri, skill_uri, error=_rpc_error(ex, msg)))
+                    continue
+                data, text, err = S.decode_contents(result, uri)
+                contents = result.get("contents")
+                head = contents[0] if isinstance(contents, list) and contents else {}
+                mime = head.get("mimeType") if isinstance(head, dict) else None
+                if data is None:
+                    files.append(SkillFile(uri, skill_uri, mime_type=mime, error=err))
+                    continue
+                budget -= len(data)
+                if len(data) > S.MAX_FILE_BYTES:
+                    text = None  # still hashed for SKL04, but too long to scan as text
+                files.append(
+                    SkillFile(
+                        uri,
+                        skill_uri,
+                        data=data,
+                        text=text,
+                        mime_type=mime if isinstance(mime, str) else None,
+                    )
+                )
+        return files
 
     async def _delete_session(self, st: _State, authenticated: bool) -> None:
         headers = self._headers(st, "", authenticated)

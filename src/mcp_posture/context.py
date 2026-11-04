@@ -91,7 +91,7 @@ class AuthServerInfo:
         return m.document if m else None
 
 
-SurfaceKind = Literal["tool", "prompt", "resource", "resource_template"]
+SurfaceKind = Literal["tool", "prompt", "resource", "resource_template", "skill"]
 
 
 @dataclass(frozen=True)
@@ -109,11 +109,46 @@ TransportKind = Literal["streamable-http", "legacy-sse", "unknown"]
 
 
 @dataclass(frozen=True)
+class SkillFile:
+    """One skill file fetched with ``resources/read`` (SEP-2640), or the reason it was not.
+
+    ``data`` holds the raw bytes the digest covers (text encoded as UTF-8, blobs decoded);
+    ``text`` is set when the content is text the model would read.
+    """
+
+    uri: str
+    skill_uri: str
+    data: bytes | None = None
+    text: str | None = None
+    mime_type: str | None = None
+    error: str | None = None  # read failed or the server answered with an error
+    skipped: str | None = None  # not fetched (binary, over budget): no finding on content
+
+
+@dataclass(frozen=True)
+class SkillsProbe:
+    """What the server publishes through the ``io.modelcontextprotocol/skills`` extension."""
+
+    declared: bool = False
+    settings: FrozenJson | None = None
+    list_ok: bool = False
+    list_error: str | None = None
+    pages: tuple[FrozenJson, ...] = ()  # each skills/list result, without its `skills`
+    entries: tuple[FrozenJson, ...] = ()  # raw Skill entries, in listing order
+    get_ok: bool | None = None  # skills/get on a listed skill; None when nothing was listed
+    get_error: str | None = None
+    unknown_get_code: int | None = None  # JSON-RPC error code for an unknown skill URI
+    unknown_get_answered: bool = False  # True when skills/get on an unknown URI got a result
+    files: tuple[SkillFile, ...] = ()
+
+
+@dataclass(frozen=True)
 class McpProbe:
     transport: TransportKind = "unknown"
     era: Literal["modern", "handshake", "unknown"] = "unknown"
     negotiated_version: str | None = None
     server_info: FrozenJson | None = None
+    capabilities: FrozenJson | None = None  # from server/discover (2026-07-28)
     auth_required: bool = False
     unauth_exchange: HttpExchange | None = None
     challenges: tuple[Challenge, ...] = ()
@@ -127,6 +162,7 @@ class McpProbe:
     # (status, absolute Location) for each redirect of the MCP endpoint itself.
     endpoint_redirects: tuple[tuple[int, str], ...] = ()
     endpoint_url: str | None = None  # where the endpoint was finally reached, if redirected
+    skills: SkillsProbe = field(default_factory=SkillsProbe)
 
 
 @dataclass(frozen=True)

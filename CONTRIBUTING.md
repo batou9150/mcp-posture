@@ -9,8 +9,9 @@ Thanks for helping. Bug reports, false positives and new checks are all welcome.
   fixture or example that contacts a third-party server.
 - No real hostnames, tokens, tool definitions or reports from production systems in issues,
   fixtures or docs. Use `example.com` / `*.test` names and synthetic data.
-- The scanner is passive: metadata `GET`s, the MCP handshake and list calls. Changes that make
-  it call tools or send state-changing requests need a design discussion first.
+- The scanner is passive: metadata `GET`s, the MCP handshake, list calls and reads of skill
+  files (SEP-2640). Changes that make it call tools or send state-changing requests need a
+  design discussion first.
 
 ## Development
 

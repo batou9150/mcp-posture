@@ -23,6 +23,7 @@ Per target, with the token added to MCP requests when you pass one:
 | `POST server/discover` (2026-07-28), else `POST initialize` and `notifications/initialized` | Protocol revision and transport, as any client does on connect |
 | A second `POST initialize`, then `DELETE` of that session (2025-11-25 and earlier, when the server issues `Mcp-Session-Id`) | Compares two session IDs (TRN08). The `DELETE` only ends the session the scanner opened |
 | `POST tools/list`, `prompts/list`, `resources/list`, `resources/templates/list`, at most 20 pages each | The tool surface (TOOL, PIN) |
+| Only when `server/discover` declares the Skills extension (SEP-2640): `POST skills/list` (at most 20 pages), `skills/get` of one listed skill and of `skill://mcp-posture-nonexistent/SKILL.md`, and `resources/read` of the skills' text files (at most 50 skills, 256 KiB per file, 4 MiB per target; binaries are never fetched) | Skill entries, integrity and content (SKL, TOOL, PIN). Reading a skill file does not install, load or run it |
 | `DELETE` of the main session at the end | Session teardown, as a client does on exit |
 | `GET` with `Accept: text/event-stream` | Legacy HTTP+SSE detection; closed after the `endpoint` event or 5 s |
 | `GET` of the Protected Resource Metadata (`resource_metadata` URL, path-inserted and root well-known) and of the authorization server metadata (RFC 8414 and OpenID variants) | OAuth discovery |
