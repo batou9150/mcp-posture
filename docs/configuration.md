@@ -58,8 +58,11 @@ mcp-posture scan https://mcp.example.com/mcp --baseline mcp-posture.lock.json
 ```
 
 The lock stores a canonical hash and the security-relevant fields (name, title, description,
-schemas, annotations, URIs) of every tool, prompt, resource and template. Unicode is not
-normalized on purpose, so an invisible character added to a description is a change.
+schemas, annotations, URIs) of every tool, prompt, resource and template, and for each skill
+(SEP-2640) its frontmatter and the digest of every file, so editing any skill file is a change.
+Unicode is not normalized on purpose, so an invisible character added to a description is a
+change. Lock files are version 2 since skills are pinned; a version 1 lock still works, but its
+skills are not compared (MCPP-PIN04) until you run `pin` again.
 `MCPP-PIN03` reports a unified diff with hidden characters made visible.
 
 ## Client configs
