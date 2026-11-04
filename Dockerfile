@@ -14,7 +14,7 @@ RUN uv export --locked --no-dev --no-emit-project --format requirements-txt -o r
  && uv build --wheel --out-dir /dist \
  && uv pip install --python python3.13 --target /app --no-deps /dist/*.whl
 
-FROM gcr.io/distroless/python3-debian13:nonroot@sha256:64e54c4b1200da244d80181d98e86fc01d73c8101f107d5baf472152d8e119a2
+FROM gcr.io/distroless/python3-debian13:nonroot@sha256:1c32c3720dc4c7f0c7dbe998737f32c200add6511eca7cec705008be488b87d6
 LABEL org.opencontainers.image.title="mcp-posture" \
       org.opencontainers.image.description="Security posture scanner for remote MCP servers" \
       org.opencontainers.image.source="https://github.com/batou9150/mcp-posture" \
