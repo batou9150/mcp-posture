@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.2.1](https://github.com/batou9150/mcp-posture/compare/v1.2.0...v1.2.1) (2026-11-14)
+
+
+### Dependencies
+
+* bump distroless/python3-debian13 from `1c32c37` to `c3ed2b6` ([#23](https://github.com/batou9150/mcp-posture/issues/23)) ([6710562](https://github.com/batou9150/mcp-posture/commit/6710562aa1f8d82d9e67a83fbc2cc70815b6ce74))
+* bump opentelemetry-api to 1.45.2 (CVE-2026-126360) ([6ed21ea](https://github.com/batou9150/mcp-posture/commit/6ed21eaa5d841a7a42f05c3cc337da0c3cacd243))
+* bump the dev group with 4 updates ([#24](https://github.com/batou9150/mcp-posture/issues/24)) ([49b07fd](https://github.com/batou9150/mcp-posture/commit/49b07fd65cf0c57bbafc05d169d492f6b2433111))
+* bump the runtime group with 2 updates ([#26](https://github.com/batou9150/mcp-posture/issues/26)) ([9371d62](https://github.com/batou9150/mcp-posture/commit/9371d622ed1a739f49709badb4756811de8514d9))
+
 ## [1.2.0](https://github.com/batou9150/mcp-posture/compare/v1.1.3...v1.2.0) (2026-11-04)
 
 
